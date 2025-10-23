@@ -4,6 +4,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { useToast } from '@/hooks/use-toast';
 import Icon from '@/components/ui/icon';
 
 type UserRole = 'supplier' | 'carrier' | 'customer';
@@ -22,7 +27,7 @@ interface Shipment {
   progress: number;
 }
 
-const mockShipments: Shipment[] = [
+const initialShipments: Shipment[] = [
   {
     id: 'SH-001',
     component: 'Дисплеи AMOLED',
@@ -120,6 +125,18 @@ const getStatusIcon = (status: ShipmentStatus): string => {
 
 export default function Index() {
   const [currentRole, setCurrentRole] = useState<UserRole>('customer');
+  const [shipments, setShipments] = useState<Shipment[]>(initialShipments);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(null);
+  const { toast } = useToast();
+
+  const [newOrder, setNewOrder] = useState({
+    component: '',
+    quantity: '',
+    supplier: 'DisplayCo',
+    origin: '',
+    estimatedDelivery: ''
+  });
 
   const roleConfig = {
     supplier: {
@@ -137,6 +154,100 @@ export default function Index() {
       icon: 'Building2',
       color: 'text-green-600'
     }
+  };
+
+  const handleCreateOrder = () => {
+    if (!newOrder.component || !newOrder.quantity || !newOrder.origin) {
+      toast({
+        title: 'Ошибка',
+        description: 'Заполните все обязательные поля',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    const newShipment: Shipment = {
+      id: `SH-${String(shipments.length + 1).padStart(3, '0')}`,
+      component: newOrder.component,
+      quantity: parseInt(newOrder.quantity),
+      supplier: newOrder.supplier,
+      carrier: 'Не назначен',
+      status: 'pending',
+      origin: newOrder.origin,
+      destination: 'Завод Siemens, Мюнхен',
+      estimatedDelivery: newOrder.estimatedDelivery || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      progress: 0
+    };
+
+    setShipments([newShipment, ...shipments]);
+    setIsDialogOpen(false);
+    setNewOrder({
+      component: '',
+      quantity: '',
+      supplier: 'DisplayCo',
+      origin: '',
+      estimatedDelivery: ''
+    });
+
+    toast({
+      title: 'Заказ создан!',
+      description: `Отгрузка ${newShipment.id} успешно создана`,
+    });
+  };
+
+  const handleStatusChange = (shipmentId: string, newStatus: ShipmentStatus) => {
+    setShipments(shipments.map(s => {
+      if (s.id === shipmentId) {
+        let newProgress = s.progress;
+        if (newStatus === 'ready') newProgress = 10;
+        if (newStatus === 'in_transit') newProgress = Math.max(30, s.progress);
+        if (newStatus === 'delayed') newProgress = s.progress;
+        if (newStatus === 'delivered') newProgress = 100;
+
+        return { ...s, status: newStatus, progress: newProgress };
+      }
+      return s;
+    }));
+
+    toast({
+      title: 'Статус обновлен',
+      description: `Отгрузка ${shipmentId}: ${getStatusText(newStatus)}`,
+    });
+  };
+
+  const handleAcceptShipment = (shipmentId: string) => {
+    setShipments(shipments.map(s => {
+      if (s.id === shipmentId && s.carrier === 'Не назначен') {
+        return { ...s, carrier: 'LogiTrans', status: 'ready' as ShipmentStatus, progress: 10 };
+      }
+      return s;
+    }));
+
+    toast({
+      title: 'Рейс принят',
+      description: `Вы взяли в работу отгрузку ${shipmentId}`,
+    });
+  };
+
+  const getAvailableStatuses = (currentStatus: ShipmentStatus, role: UserRole): ShipmentStatus[] => {
+    if (role === 'supplier') {
+      if (currentStatus === 'pending') return ['ready'];
+      return [];
+    }
+    if (role === 'carrier') {
+      if (currentStatus === 'ready') return ['in_transit'];
+      if (currentStatus === 'in_transit') return ['delayed', 'delivered'];
+      if (currentStatus === 'delayed') return ['in_transit', 'delivered'];
+      return [];
+    }
+    return [];
+  };
+
+  const stats = {
+    active: shipments.filter(s => ['pending', 'ready', 'in_transit', 'delayed'].includes(s.status)).length,
+    inTransit: shipments.filter(s => s.status === 'in_transit').length,
+    delayed: shipments.filter(s => s.status === 'delayed').length,
+    delivered: shipments.filter(s => s.status === 'delivered').length
   };
 
   return (
@@ -210,8 +321,8 @@ export default function Index() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold font-roboto">8</div>
-              <p className="text-xs text-muted-foreground mt-1">+2 с прошлой недели</p>
+              <div className="text-3xl font-bold font-roboto">{stats.active}</div>
+              <p className="text-xs text-muted-foreground mt-1">Требуют обработки</p>
             </CardContent>
           </Card>
 
@@ -223,8 +334,8 @@ export default function Index() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold font-roboto">5</div>
-              <p className="text-xs text-muted-foreground mt-1">Средний прогресс: 63%</p>
+              <div className="text-3xl font-bold font-roboto">{stats.inTransit}</div>
+              <p className="text-xs text-muted-foreground mt-1">На маршруте</p>
             </CardContent>
           </Card>
 
@@ -236,7 +347,7 @@ export default function Index() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold font-roboto">1</div>
+              <div className="text-3xl font-bold font-roboto">{stats.delayed}</div>
               <p className="text-xs text-muted-foreground mt-1">Требует внимания</p>
             </CardContent>
           </Card>
@@ -249,8 +360,8 @@ export default function Index() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold font-roboto">42</div>
-              <p className="text-xs text-muted-foreground mt-1">В этом месяце</p>
+              <div className="text-3xl font-bold font-roboto">{stats.delivered}</div>
+              <p className="text-xs text-muted-foreground mt-1">Всего завершено</p>
             </CardContent>
           </Card>
         </div>
@@ -281,16 +392,102 @@ export default function Index() {
                     <CardTitle>Текущие отгрузки</CardTitle>
                     <CardDescription>Список всех активных и завершенных отгрузок</CardDescription>
                   </div>
-                  {currentRole !== 'carrier' && (
-                    <Button className="bg-[#0066CC] hover:bg-[#0052A3]">
-                      <Icon name="Plus" size={16} className="mr-2" />
-                      {currentRole === 'supplier' ? 'Создать отгрузку' : 'Новый заказ'}
-                    </Button>
+                  {(currentRole === 'customer' || currentRole === 'supplier') && (
+                    <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                      <DialogTrigger asChild>
+                        <Button className="bg-[#0066CC] hover:bg-[#0052A3]">
+                          <Icon name="Plus" size={16} className="mr-2" />
+                          {currentRole === 'supplier' ? 'Создать отгрузку' : 'Новый заказ'}
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-[500px]">
+                        <DialogHeader>
+                          <DialogTitle className="flex items-center gap-2">
+                            <Icon name="PackagePlus" size={24} className="text-[#0066CC]" />
+                            {currentRole === 'supplier' ? 'Создать отгрузку' : 'Создать заказ'}
+                          </DialogTitle>
+                          <DialogDescription>
+                            Заполните данные для новой отгрузки компонентов
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4 py-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="component">Компонент *</Label>
+                            <Input
+                              id="component"
+                              placeholder="Например: Дисплеи AMOLED"
+                              value={newOrder.component}
+                              onChange={(e) => setNewOrder({ ...newOrder, component: e.target.value })}
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="quantity">Количество *</Label>
+                              <Input
+                                id="quantity"
+                                type="number"
+                                placeholder="5000"
+                                value={newOrder.quantity}
+                                onChange={(e) => setNewOrder({ ...newOrder, quantity: e.target.value })}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="supplier">Поставщик</Label>
+                              <Select 
+                                value={newOrder.supplier} 
+                                onValueChange={(value) => setNewOrder({ ...newOrder, supplier: value })}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="DisplayCo">DisplayCo</SelectItem>
+                                  <SelectItem value="BatteryLtd">BatteryLtd</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="origin">Склад отправки *</Label>
+                            <Input
+                              id="origin"
+                              placeholder="Шэньчжэнь, Китай"
+                              value={newOrder.origin}
+                              onChange={(e) => setNewOrder({ ...newOrder, origin: e.target.value })}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="delivery">Планируемая дата доставки</Label>
+                            <Input
+                              id="delivery"
+                              type="date"
+                              value={newOrder.estimatedDelivery}
+                              onChange={(e) => setNewOrder({ ...newOrder, estimatedDelivery: e.target.value })}
+                            />
+                          </div>
+                        </div>
+                        <div className="flex gap-3">
+                          <Button
+                            variant="outline"
+                            className="flex-1"
+                            onClick={() => setIsDialogOpen(false)}
+                          >
+                            Отмена
+                          </Button>
+                          <Button
+                            className="flex-1 bg-[#0066CC] hover:bg-[#0052A3]"
+                            onClick={handleCreateOrder}
+                          >
+                            Создать
+                          </Button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
                   )}
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                {mockShipments.map((shipment) => (
+                {shipments.map((shipment) => (
                   <div
                     key={shipment.id}
                     className="border rounded-lg p-4 hover:shadow-md transition-all hover:border-[#0066CC]/30"
@@ -323,10 +520,35 @@ export default function Index() {
                           </div>
                         </div>
                       </div>
-                      <Button variant="outline" size="sm">
-                        <Icon name="ExternalLink" size={14} className="mr-2" />
-                        Детали
-                      </Button>
+                      <div className="flex gap-2">
+                        {currentRole === 'carrier' && shipment.carrier === 'Не назначен' && shipment.status === 'ready' && (
+                          <Button 
+                            size="sm" 
+                            className="bg-[#0066CC] hover:bg-[#0052A3]"
+                            onClick={() => handleAcceptShipment(shipment.id)}
+                          >
+                            <Icon name="Check" size={14} className="mr-2" />
+                            Принять
+                          </Button>
+                        )}
+                        {getAvailableStatuses(shipment.status, currentRole).length > 0 && (
+                          <Select onValueChange={(value) => handleStatusChange(shipment.id, value as ShipmentStatus)}>
+                            <SelectTrigger className="w-[160px]">
+                              <SelectValue placeholder="Изменить статус" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {getAvailableStatuses(shipment.status, currentRole).map(status => (
+                                <SelectItem key={status} value={status}>
+                                  <div className="flex items-center gap-2">
+                                    <Icon name={getStatusIcon(status) as any} size={14} />
+                                    {getStatusText(status)}
+                                  </div>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
+                      </div>
                     </div>
 
                     <div className="space-y-2">
@@ -387,15 +609,15 @@ export default function Index() {
                     <div className="flex items-center justify-center gap-4 pt-4">
                       <Badge variant="outline" className="bg-white border-[#FFB420]/30">
                         <div className="w-2 h-2 rounded-full bg-[#FFB420] mr-2" />
-                        В пути: 5
+                        В пути: {stats.inTransit}
                       </Badge>
                       <Badge variant="outline" className="bg-white border-[#FF4444]/30">
                         <div className="w-2 h-2 rounded-full bg-[#FF4444] mr-2" />
-                        Задержаны: 1
+                        Задержаны: {stats.delayed}
                       </Badge>
                       <Badge variant="outline" className="bg-white border-[#00AA55]/30">
                         <div className="w-2 h-2 rounded-full bg-[#00AA55] mr-2" />
-                        Доставлены: 2
+                        Доставлены: {stats.delivered}
                       </Badge>
                     </div>
                   </div>
@@ -423,7 +645,7 @@ export default function Index() {
                           <span className="text-sm font-bold text-[#00AA55]">94%</span>
                         </div>
                         <div className="bg-gray-100 rounded-full h-2">
-                          <div className="bg-[#00AA55] h-full rounded-full" style={{ width: '94%' }} />
+                          <div className="bg-[#00AA55] h-full rounded-full transition-all duration-500" style={{ width: '94%' }} />
                         </div>
                       </div>
                       <div>
@@ -432,7 +654,7 @@ export default function Index() {
                           <span className="text-sm font-bold text-[#FFB420]">87%</span>
                         </div>
                         <div className="bg-gray-100 rounded-full h-2">
-                          <div className="bg-[#FFB420] h-full rounded-full" style={{ width: '87%' }} />
+                          <div className="bg-[#FFB420] h-full rounded-full transition-all duration-500" style={{ width: '87%' }} />
                         </div>
                       </div>
                     </div>
@@ -449,21 +671,21 @@ export default function Index() {
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="space-y-3">
-                      <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
+                      <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg transition-all hover:shadow-md">
                         <div className="flex items-center gap-2">
                           <Icon name="Monitor" size={16} className="text-[#0066CC]" />
                           <span className="text-sm font-medium">Дисплеи</span>
                         </div>
                         <span className="text-lg font-bold font-roboto">12 дней</span>
                       </div>
-                      <div className="flex items-center justify-between p-3 bg-orange-50 rounded-lg">
+                      <div className="flex items-center justify-between p-3 bg-orange-50 rounded-lg transition-all hover:shadow-md">
                         <div className="flex items-center gap-2">
                           <Icon name="Battery" size={16} className="text-[#FFB420]" />
                           <span className="text-sm font-medium">Аккумуляторы</span>
                         </div>
                         <span className="text-lg font-bold font-roboto">9 дней</span>
                       </div>
-                      <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                      <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg transition-all hover:shadow-md">
                         <div className="flex items-center gap-2">
                           <Icon name="Cpu" size={16} className="text-[#00AA55]" />
                           <span className="text-sm font-medium">Процессоры</span>
