@@ -13,6 +13,7 @@ interface ShipmentsTabProps {
   onCreateOrder: () => void;
   onStatusChange: (shipmentId: string, newStatus: ShipmentStatus) => void;
   onAcceptShipment: (shipmentId: string) => void;
+  onViewDetails: (shipment: Shipment) => void;
 }
 
 export function ShipmentsTab({
@@ -24,7 +25,8 @@ export function ShipmentsTab({
   onOrderChange,
   onCreateOrder,
   onStatusChange,
-  onAcceptShipment
+  onAcceptShipment,
+  onViewDetails
 }: ShipmentsTabProps) {
   return (
     <Card>
@@ -54,6 +56,7 @@ export function ShipmentsTab({
             currentRole={currentRole}
             onStatusChange={onStatusChange}
             onAcceptShipment={onAcceptShipment}
+            onViewDetails={onViewDetails}
           />
         ))}
       </CardContent>

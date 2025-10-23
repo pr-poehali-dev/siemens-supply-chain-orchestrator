@@ -7,6 +7,7 @@ import { StatsCards } from '@/components/supply-chain/StatsCards';
 import { ShipmentsTab } from '@/components/supply-chain/ShipmentsTab';
 import { MapTab } from '@/components/supply-chain/MapTab';
 import { AnalyticsTab } from '@/components/supply-chain/AnalyticsTab';
+import { ShipmentDetailsDialog } from '@/components/supply-chain/ShipmentDetailsDialog';
 import { UserRole, Shipment, ShipmentStatus, NewOrder } from '@/components/supply-chain/types';
 import { initialShipments, roleConfig } from '@/components/supply-chain/data';
 import { getStatusText } from '@/components/supply-chain/utils';
@@ -15,6 +16,8 @@ export default function Index() {
   const [currentRole, setCurrentRole] = useState<UserRole>('customer');
   const [shipments, setShipments] = useState<Shipment[]>(initialShipments);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(null);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const { toast } = useToast();
 
   const [newOrder, setNewOrder] = useState<NewOrder>({
@@ -45,7 +48,15 @@ export default function Index() {
       origin: newOrder.origin,
       destination: 'Завод Siemens, Мюнхен',
       estimatedDelivery: newOrder.estimatedDelivery || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      progress: 0
+      progress: 0,
+      history: [
+        {
+          status: 'pending',
+          timestamp: new Date().toISOString(),
+          user: currentRole === 'customer' ? 'Заказчик' : 'Поставщик',
+          note: 'Заказ создан'
+        }
+      ]
     };
 
     setShipments([newShipment, ...shipments]);
@@ -65,6 +76,12 @@ export default function Index() {
   };
 
   const handleStatusChange = (shipmentId: string, newStatus: ShipmentStatus) => {
+    const roleNames: Record<UserRole, string> = {
+      supplier: 'Поставщик',
+      carrier: 'Грузчик',
+      customer: 'Заказчик'
+    };
+
     setShipments(shipments.map(s => {
       if (s.id === shipmentId) {
         let newProgress = s.progress;
@@ -73,7 +90,18 @@ export default function Index() {
         if (newStatus === 'delayed') newProgress = s.progress;
         if (newStatus === 'delivered') newProgress = 100;
 
-        return { ...s, status: newStatus, progress: newProgress };
+        const newHistoryEntry = {
+          status: newStatus,
+          timestamp: new Date().toISOString(),
+          user: roleNames[currentRole]
+        };
+
+        return { 
+          ...s, 
+          status: newStatus, 
+          progress: newProgress,
+          history: [...(s.history || []), newHistoryEntry]
+        };
       }
       return s;
     }));
@@ -87,7 +115,20 @@ export default function Index() {
   const handleAcceptShipment = (shipmentId: string) => {
     setShipments(shipments.map(s => {
       if (s.id === shipmentId && s.carrier === 'Не назначен') {
-        return { ...s, carrier: 'LogiTrans', status: 'ready' as ShipmentStatus, progress: 10 };
+        const newHistoryEntry = {
+          status: 'ready' as ShipmentStatus,
+          timestamp: new Date().toISOString(),
+          user: 'Грузчик',
+          note: 'Рейс принят в работу'
+        };
+
+        return { 
+          ...s, 
+          carrier: 'LogiTrans', 
+          status: 'ready' as ShipmentStatus, 
+          progress: 10,
+          history: [...(s.history || []), newHistoryEntry]
+        };
       }
       return s;
     }));
@@ -96,6 +137,11 @@ export default function Index() {
       title: 'Рейс принят',
       description: `Вы взяли в работу отгрузку ${shipmentId}`,
     });
+  };
+
+  const handleViewDetails = (shipment: Shipment) => {
+    setSelectedShipment(shipment);
+    setIsDetailsOpen(true);
   };
 
   const stats = {
@@ -149,6 +195,7 @@ export default function Index() {
               onCreateOrder={handleCreateOrder}
               onStatusChange={handleStatusChange}
               onAcceptShipment={handleAcceptShipment}
+              onViewDetails={handleViewDetails}
             />
           </TabsContent>
 
@@ -163,6 +210,12 @@ export default function Index() {
           )}
         </Tabs>
       </main>
+
+      <ShipmentDetailsDialog
+        shipment={selectedShipment}
+        isOpen={isDetailsOpen}
+        onOpenChange={setIsDetailsOpen}
+      />
     </div>
   );
 }

@@ -10,9 +10,10 @@ interface ShipmentCardProps {
   currentRole: UserRole;
   onStatusChange: (shipmentId: string, newStatus: ShipmentStatus) => void;
   onAcceptShipment: (shipmentId: string) => void;
+  onViewDetails: (shipment: Shipment) => void;
 }
 
-export function ShipmentCard({ shipment, currentRole, onStatusChange, onAcceptShipment }: ShipmentCardProps) {
+export function ShipmentCard({ shipment, currentRole, onStatusChange, onAcceptShipment, onViewDetails }: ShipmentCardProps) {
   const availableStatuses = getAvailableStatuses(shipment.status, currentRole);
 
   return (
@@ -105,6 +106,18 @@ export function ShipmentCard({ shipment, currentRole, onStatusChange, onAcceptSh
           </div>
           <span className="text-sm font-medium font-roboto w-12 text-right">{shipment.progress}%</span>
         </div>
+      </div>
+
+      <div className="mt-4 pt-4 border-t flex justify-end">
+        <Button 
+          variant="outline" 
+          size="sm"
+          onClick={() => onViewDetails(shipment)}
+          className="hover:bg-[#0066CC] hover:text-white transition-colors"
+        >
+          <Icon name="FileText" size={14} className="mr-2" />
+          Подробнее
+        </Button>
       </div>
     </div>
   );

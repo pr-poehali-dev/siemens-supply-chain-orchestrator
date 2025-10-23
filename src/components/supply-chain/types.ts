@@ -1,6 +1,13 @@
 export type UserRole = 'supplier' | 'carrier' | 'customer';
 export type ShipmentStatus = 'pending' | 'ready' | 'in_transit' | 'delayed' | 'delivered';
 
+export interface StatusHistoryEntry {
+  status: ShipmentStatus;
+  timestamp: string;
+  user: string;
+  note?: string;
+}
+
 export interface Shipment {
   id: string;
   component: string;
@@ -12,6 +19,7 @@ export interface Shipment {
   destination: string;
   estimatedDelivery: string;
   progress: number;
+  history?: StatusHistoryEntry[];
 }
 
 export interface NewOrder {
