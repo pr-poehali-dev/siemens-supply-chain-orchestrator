@@ -8,6 +8,10 @@ import { ShipmentsTab } from '@/components/supply-chain/ShipmentsTab';
 import { MapTab } from '@/components/supply-chain/MapTab';
 import { AnalyticsTab } from '@/components/supply-chain/AnalyticsTab';
 import { ShipmentDetailsDialog } from '@/components/supply-chain/ShipmentDetailsDialog';
+import { ProfileDialog } from '@/components/supply-chain/ProfileDialog';
+import { QuickActions } from '@/components/supply-chain/QuickActions';
+import { Footer } from '@/components/supply-chain/Footer';
+import { HelpButton } from '@/components/supply-chain/HelpButton';
 import { UserRole, Shipment, ShipmentStatus, NewOrder } from '@/components/supply-chain/types';
 import { initialShipments, roleConfig } from '@/components/supply-chain/data';
 import { getStatusText } from '@/components/supply-chain/utils';
@@ -18,6 +22,9 @@ export default function Index() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedStatuses, setSelectedStatuses] = useState<ShipmentStatus[]>([]);
   const { toast } = useToast();
 
   const [newOrder, setNewOrder] = useState<NewOrder>({
@@ -144,6 +151,31 @@ export default function Index() {
     setIsDetailsOpen(true);
   };
 
+  const handleStatusToggle = (status: ShipmentStatus) => {
+    setSelectedStatuses(prev => 
+      prev.includes(status) 
+        ? prev.filter(s => s !== status)
+        : [...prev, status]
+    );
+  };
+
+  const handleClearFilters = () => {
+    setSelectedStatuses([]);
+    setSearchQuery('');
+  };
+
+  const filteredShipments = shipments.filter(shipment => {
+    const matchesSearch = searchQuery === '' || 
+      shipment.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      shipment.component.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      shipment.supplier.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      shipment.carrier.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    const matchesStatus = selectedStatuses.length === 0 || selectedStatuses.includes(shipment.status);
+    
+    return matchesSearch && matchesStatus;
+  });
+
   const stats = {
     active: shipments.filter(s => ['pending', 'ready', 'in_transit', 'delayed'].includes(s.status)).length,
     inTransit: shipments.filter(s => s.status === 'in_transit').length,
@@ -152,19 +184,25 @@ export default function Index() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <Header currentRole={currentRole} onRoleChange={setCurrentRole} />
+    <div className="min-h-screen bg-background flex flex-col">
+      <Header 
+        currentRole={currentRole} 
+        onRoleChange={setCurrentRole}
+        onProfileClick={() => setIsProfileOpen(true)}
+      />
 
-      <main className="container mx-auto px-6 py-8">
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-2">
-            <Icon name={roleConfig[currentRole].icon as any} className={roleConfig[currentRole].color} size={32} />
-            <h2 className="text-3xl font-bold font-inter">{roleConfig[currentRole].title}</h2>
+      <main className="container mx-auto px-4 md:px-6 py-6 md:py-8 flex-1">
+        <div className="mb-6 md:mb-8">
+          <div className="flex items-center gap-2 md:gap-3 mb-2">
+            <Icon name={roleConfig[currentRole].icon as any} className={roleConfig[currentRole].color} size={28} />
+            <h2 className="text-2xl md:text-3xl font-bold font-inter">{roleConfig[currentRole].title}</h2>
           </div>
-          <p className="text-muted-foreground">Управление логистической цепочкой в реальном времени</p>
+          <p className="text-sm md:text-base text-muted-foreground">Управление логистической цепочкой в реальном времени</p>
         </div>
 
         <StatsCards stats={stats} />
+
+        <QuickActions currentRole={currentRole} onCreateOrder={() => setIsDialogOpen(true)} />
 
         <Tabs defaultValue="shipments" className="space-y-6">
           <TabsList className="bg-white border">
@@ -186,7 +224,7 @@ export default function Index() {
 
           <TabsContent value="shipments" className="space-y-4">
             <ShipmentsTab
-              shipments={shipments}
+              shipments={filteredShipments}
               currentRole={currentRole}
               isDialogOpen={isDialogOpen}
               onDialogOpenChange={setIsDialogOpen}
@@ -196,6 +234,11 @@ export default function Index() {
               onStatusChange={handleStatusChange}
               onAcceptShipment={handleAcceptShipment}
               onViewDetails={handleViewDetails}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              selectedStatuses={selectedStatuses}
+              onStatusToggle={handleStatusToggle}
+              onClearFilters={handleClearFilters}
             />
           </TabsContent>
 
@@ -211,11 +254,21 @@ export default function Index() {
         </Tabs>
       </main>
 
+      <Footer />
+
       <ShipmentDetailsDialog
         shipment={selectedShipment}
         isOpen={isDetailsOpen}
         onOpenChange={setIsDetailsOpen}
       />
+
+      <ProfileDialog
+        isOpen={isProfileOpen}
+        onOpenChange={setIsProfileOpen}
+        currentRole={currentRole}
+      />
+
+      <HelpButton />
     </div>
   );
 }
